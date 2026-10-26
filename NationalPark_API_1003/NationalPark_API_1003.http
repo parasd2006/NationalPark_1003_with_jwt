@@ -1,0 +1,6 @@
+@NationalPark_API_1003_HostAddress = http://localhost:5119
+
+GET {{NationalPark_API_1003_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

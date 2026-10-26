@@ -1,0 +1,240 @@
+@{
+    ViewData["Title"] = "Cancel Booking";
+}
+
+<div class="container my-4">
+    <div class="row justify-content-center">
+        <div class="col-md-6" id="cancelFormCard">
+            <div class="card shadow-sm border">
+                <div class="card-header bg-danger text-white text-center">
+                    <h5 class="mb-0">Cancel Booking</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Enter Registered Phone Number:</label>
+                        <div class="input-group">
+                            <span class="input-group-text">+91</span>
+                            <input type="text" id="phoneInput" class="form-control" placeholder="10-digit mobile number" maxlength="10" />
+                        </div>
+                        <small class="text-muted">OTP will be sent to this mobile number via SMS.</small>
+                    </div>
+                    <div id="phoneAlert" class="alert alert-danger d-none py-2" role="alert"></div>
+                    <button type="button" class="btn btn-danger w-100" id="sendOtpBtn" onclick="sendOtp()">
+                        Send OTP
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 mt-4 d-none" id="bookingsSection">
+            <div class="card shadow-sm border">
+                <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Your Bookings</h5>
+                    <button class="btn btn-outline-light btn-sm" onclick="resetForm()">Check Another Number</button>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-striped text-center mb-0 align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Booking ID</th>
+                                    <th>National Park</th>
+                                    <th>Name</th>
+                                    <th>Visit Date</th>
+                                    <th>Amount</th>
+                                    <th>Payment</th>
+                                    <th>Status</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bookingsTableBody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        let userPhone = "";
+
+        function sendOtp() {
+            userPhone = $('#phoneInput').val().trim();
+            const phoneAlert = $('#phoneAlert');
+            phoneAlert.addClass('d-none').text('');
+
+            if (!userPhone || userPhone.length < 10) {
+                phoneAlert.removeClass('d-none').text('Please enter a valid 10-digit mobile number.');
+                return;
+            }
+
+            const sendBtn = $('#sendOtpBtn');
+            sendBtn.prop('disabled', true).text('Sending OTP...');
+
+            fetch('/BookingCancel/SendCancelOtp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phoneNumber: userPhone })
+            })
+            .then(res => res.json())
+            .then(data => {
+                sendBtn.prop('disabled', false).text('Send OTP');
+                if (data.success) {
+                    showOtpPopup(data.message || "OTP has been sent to your mobile number.");
+                } else {
+                    phoneAlert.removeClass('d-none').text(data.message);
+                }
+            })
+            .catch(() => {
+                sendBtn.prop('disabled', false).text('Send OTP');
+                phoneAlert.removeClass('d-none').text('Failed to send OTP. Please try again.');
+            });
+        }
+
+        function showOtpPopup(message) {
+            swal({
+                title: "Enter OTP",
+                text: message,
+                content: {
+                    element: "input",
+                    attributes: {
+                        placeholder: "Enter 6-digit OTP",
+                        type: "text",
+                        maxLength: 6,
+                        style: "text-align: center; font-size: 1.25rem; letter-spacing: 4px;"
+                    },
+                },
+                buttons: {
+                    cancel: {
+                        text: "Change Phone",
+                        value: null,
+                        visible: true,
+                        className: "btn-secondary"
+                    },
+                    confirm: {
+                        text: "Verify OTP",
+                        closeModal: false
+                    }
+                },
+                closeOnClickOutside: false,
+            })
+            .then((otpVal) => {
+                if (otpVal === null) {
+                    resetForm();
+                    return;
+                }
+
+                otpVal = otpVal.trim();
+                if (!otpVal || otpVal.length !== 6) {
+                    swal("Invalid OTP", "Please enter a valid 6-digit OTP.", "error")
+                        .then(() => showOtpPopup(message));
+                    return;
+                }
+
+                fetch('/BookingCancel/VerifyOtpAndGetBookings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phoneNumber: userPhone, otp: otpVal })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        swal.close();
+                        $('#cancelFormCard').addClass('d-none');
+                        renderBookings(data.bookings);
+                        $('#bookingsSection').removeClass('d-none');
+                    } else {
+                        swal("Verification Failed", data.message || "Invalid OTP entered.", "error")
+                            .then(() => showOtpPopup(message));
+                    }
+                })
+                .catch(() => {
+                    swal("Error", "Failed to verify OTP. Please try again.", "error");
+                });
+            });
+        }
+
+        function renderBookings(bookings) {
+            let html = '';
+            if (!bookings || bookings.length === 0) {
+                html = '<tr><td colspan="8" class="text-muted py-3">No bookings found for this number.</td></tr>';
+            } else {
+                bookings.forEach(b => {
+                    const isCancelled = (b.bookingStatus === 'Cancelled');
+                    const statusText = isCancelled
+                        ? '<span class="badge bg-danger">Cancelled</span>'
+                        : '<span class="badge bg-success">Confirmed</span>';
+
+                    const actionBtn = isCancelled
+                        ? '<button class="btn btn-secondary btn-sm" disabled>Cancelled</button>'
+                        : `<button class="btn btn-danger btn-sm" id="btn-${b.id}" onclick="cancelBooking(${b.id}, '${b.parkName}')">Cancel Booking</button>`;
+
+                    const paymentText = (b.paymentStatus === 'Refunded')
+                        ? '<span class="badge bg-warning text-dark">Refunded</span>'
+                        : `<span class="badge bg-info text-dark">${b.paymentStatus}</span>`;
+
+                    html += `
+                        <tr id="row-${b.id}">
+                            <td class="fw-bold">#${b.id}</td>
+                            <td>${b.parkName}</td>
+                            <td>${b.customerName}</td>
+                            <td>${b.visitDate}</td>
+                            <td>₹${b.amount}</td>
+                            <td id="pay-${b.id}">${paymentText}</td>
+                            <td id="status-${b.id}">${statusText}</td>
+                            <td id="action-${b.id}">${actionBtn}</td>
+                        </tr>
+                    `;
+                });
+            }
+            $('#bookingsTableBody').html(html);
+        }
+
+        function cancelBooking(id, parkName) {
+            swal({
+                title: "Are you sure?",
+                text: "Are you sure you want to cancel Booking #" + id + " for " + parkName + "?",
+                icon: "warning",
+                buttons: true,
+                dangerMode: true,
+            })
+            .then((willCancel) => {
+                if (willCancel) {
+                    const btn = $(`#btn-${id}`);
+                    btn.prop('disabled', true).text('Cancelling...');
+
+                    fetch(`/BookingCancel/ConfirmCancel?id=${id}`, {
+                        method: 'POST'
+                    })
+                    .then(res => res.json())
+                    .then(res => {
+                        if (res.success) {
+                            swal("Cancelled!", "Booking #" + id + " has been cancelled successfully.", "success");
+                            $(`#status-${id}`).html('<span class="badge bg-danger">Cancelled</span>');
+                            $(`#pay-${id}`).html('<span class="badge bg-warning text-dark">Refunded</span>');
+                            $(`#action-${id}`).html('<button class="btn btn-secondary btn-sm" disabled>Cancelled</button>');
+                        } else {
+                            swal("Error", res.message || "Failed to cancel booking.", "error");
+                            btn.prop('disabled', false).text('Cancel Booking');
+                        }
+                    })
+                    .catch(() => {
+                        swal("Error", "Failed to cancel booking. Please try again.", "error");
+                        btn.prop('disabled', false).text('Cancel Booking');
+                    });
+                }
+            });
+        }
+
+        function resetForm() {
+            $('#phoneInput').prop('disabled', false).val('');
+            $('#sendOtpBtn').removeClass('d-none').prop('disabled', false).text('Send OTP');
+            $('#phoneAlert').addClass('d-none').text('');
+            $('#cancelFormCard').removeClass('d-none');
+            $('#bookingsSection').addClass('d-none');
+        }
+    </script>
+}

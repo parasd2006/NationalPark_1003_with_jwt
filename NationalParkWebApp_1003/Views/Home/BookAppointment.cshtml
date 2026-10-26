@@ -1,0 +1,222 @@
+﻿
+@model NationalParkWebApp_1003.Models.Appointment
+@inject Microsoft.Extensions.Configuration.IConfiguration Configuration
+@inject IOptions<NationalParkWebApp_1003.Models.StripeSettings> Stripe
+@using Microsoft.Extensions.Options
+
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-7">
+            <div class="card shadow-lg border-0 rounded-3">
+                <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center py-3">
+                    <h5 class="mb-0 text-warning">
+                        <i class="bi bi-calendar-check me-2"></i>Book Park Appointment
+                    </h5>
+                    @if (Model.NationalPark != null)
+                    {
+                        <span class="badge bg-warning text-dark px-3 py-2 fs-6">
+                            @Model.NationalPark.Name (@Model.NationalPark.State)
+                        </span>
+                    }
+                </div>
+
+                <div class="card-body p-4">
+                    <form method="post" asp-action="BookAppointment">
+                        <input type="hidden" asp-for="NationalParkId" />
+
+                        <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+                        <div class="mb-3">
+                            <label asp-for="CustomerName" class="form-label fw-bold">Full Name</label>
+                            <input asp-for="CustomerName" class="form-control" placeholder="Enter your full name" />
+                            <span asp-validation-for="CustomerName" class="text-danger small"></span>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label asp-for="CustomerEmail" class="form-label fw-bold">Email Address</label>
+                                <input asp-for="CustomerEmail" class="form-control" placeholder="name@example.com" />
+                                <span asp-validation-for="CustomerEmail" class="text-danger small"></span>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label asp-for="CustomerPhone" class="form-label fw-bold">Phone Number</label>
+                                <input asp-for="CustomerPhone" class="form-control" placeholder="e.g. 9876543210" />
+                                <span asp-validation-for="CustomerPhone" class="text-danger small"></span>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label asp-for="TrailId" class="form-label fw-bold">Select Trail</label>
+                            <select asp-for="TrailId" asp-items="ViewBag.TrailList" class="form-select">
+                                <option value="">-- Choose a Trail --</option>
+                            </select>
+                            <span asp-validation-for="TrailId" class="text-danger small"></span>
+                        </div>
+
+                        <div class="mb-3">
+                            <label asp-for="VisitDate" class="form-label fw-bold">Date of Visit</label>
+                            <input asp-for="VisitDate"
+                                   id="visitDateInput"
+                                   type="date"
+                                   min="@DateTime.Today.AddDays(1).ToString("yyyy-MM-dd")"
+                                   class="form-control" />
+                            <span asp-validation-for="VisitDate" class="text-danger small"></span>
+
+                            <div id="bookedDateAlert" class="alert alert-danger d-none py-2 mt-2">
+                                <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                                This date is completely booked (100 persons capacity reached). Please select another date.
+                            </div>
+                        </div>
+
+                        <hr class="my-4" />
+
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="fw-bold mb-0">Select Persons</h6>
+                            <span class="text-muted small">Max 5 persons allowed per booking</span>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label asp-for="NumberOfAdults" class="form-label fw-semibold">
+                                    Adults <span class="badge bg-light text-dark border">₹100 each</span>
+                                </label>
+                                <input asp-for="NumberOfAdults"
+                                       id="numAdults"
+                                       type="number"
+                                       min="1"
+                                       max="5"
+                                       class="form-control person-input" />
+                                <span asp-validation-for="NumberOfAdults" class="text-danger small"></span>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label asp-for="NumberOfChildren" class="form-label fw-semibold">
+                                    Children <span class="badge bg-light text-dark border">₹50 each</span>
+                                </label>
+                                <input asp-for="NumberOfChildren"
+                                       id="numChildren"
+                                       type="number"
+                                       min="0"
+                                       max="4"
+                                       class="form-control person-input" />
+                                <span asp-validation-for="NumberOfChildren" class="text-danger small"></span>
+                            </div>
+                        </div>
+
+                        <div id="personLimitAlert" class="alert alert-danger d-none py-2">
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                            Total persons (Adults + Children) cannot be more than 5.
+                        </div>
+
+                        <div class="alert alert-secondary d-flex justify-content-between align-items-center my-3 py-3 px-4 rounded-3">
+                            <div>
+                                <span class="text-muted small d-block">Estimated Amount</span>
+                                <strong class="fs-5 text-dark">Total Fee</strong>
+                            </div>
+                            <div class="text-end">
+                                <span id="displayAmount" class="fs-3 fw-bold text-success">₹100</span>
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-between align-items-center mt-4">
+                            <a asp-action="Index" class="btn btn-outline-secondary px-4">
+                                <i class="bi bi-arrow-left me-1"></i>Back
+                            </a>
+
+                            <div>
+                                @{
+                                    var orderTotalAmount = 100 * 100;
+                                }
+                                <script src="https://checkout.stripe.com/checkout.js"
+                                        class="stripe-button"
+                                        data-key="@ViewBag.StripePublishableKey"
+                                        data-amount="@orderTotalAmount"
+                                        data-name="National Park Booking"
+                                        data-description="Book Park Appointment"
+                                        data-locale="auto"
+                                        data-label="Proceed to Book"
+                                        data-allow-remember-me="false"
+                                        data-image="https://stripe.com/img/documentation/checkout/marketplace.png">
+                                </script>
+
+                                <script>
+                                                                    document.getElementsByClassName("stripe-button-el")[0].style.display = 'none';
+                                </script>
+
+                                <button type="submit" id="submitBtn" class="btn btn-success px-5 fw-bold shadow-sm">
+                                    Proceed to Book <i class="bi bi-arrow-right ms-1"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+
+    <script>
+        var fullyBookedDates = @Html.Raw(ViewBag.FullyBookedDates ?? "[]");
+
+        function checkSelectedDate() {
+            var selectedDate = $("#visitDateInput").val();
+
+            if (fullyBookedDates && fullyBookedDates.includes(selectedDate)) {
+                $("#bookedDateAlert").removeClass("d-none");
+                $("#visitDateInput").val("");
+                $("#submitBtn").prop("disabled", true);
+            } else {
+                $("#bookedDateAlert").addClass("d-none");
+                validateForm();
+            }
+        }
+
+        function updatePricing() {
+            var adults = parseInt($("#numAdults").val()) || 0;
+            var children = parseInt($("#numChildren").val()) || 0;
+            var total = adults + children;
+
+            if (total > 5) {
+                $("#personLimitAlert").removeClass("d-none");
+            } else {
+                $("#personLimitAlert").addClass("d-none");
+            }
+
+            var calculatedAmount = (adults * 100) + (children * 50);
+            $("#displayAmount").text("₹" + calculatedAmount);
+
+            validateForm();
+        }
+
+        function validateForm() {
+            var adults = parseInt($("#numAdults").val()) || 0;
+            var children = parseInt($("#numChildren").val()) || 0;
+            var total = adults + children;
+            var selectedDate = $("#visitDateInput").val();
+
+            var isDateBlocked = fullyBookedDates && fullyBookedDates.includes(selectedDate);
+            var isPersonLimitExceeded = (total > 5) || (adults < 1);
+
+            if (isPersonLimitExceeded || isDateBlocked || !selectedDate) {
+                $("#submitBtn").prop("disabled", true);
+            } else {
+                $("#submitBtn").prop("disabled", false);
+            }
+        }
+
+        $(document).on("change", "#visitDateInput", function () {
+            checkSelectedDate();
+        });
+
+        $(document).on("input change", ".person-input", function () {
+            updatePricing();
+        });
+
+        $(document).ready(function () {
+            checkSelectedDate();
+            updatePricing();
+        });
+    </script>
+}

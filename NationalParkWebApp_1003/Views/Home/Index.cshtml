@@ -1,0 +1,169 @@
+﻿@model NationalParkWebApp_1003.Models.NationalParkVM.IndexVM
+
+<table id="nationalParkTable" class="w-100 border-0">
+    <thead>
+        <tr>
+            <th>Card View</th>
+            <th>Name</th>
+            <th>State</th>
+            <th>All</th>
+        </tr>
+    </thead>
+    <tbody>
+        @if (Model?.NationalParkList != null)
+        {
+            @foreach (var nationalPark in Model.NationalParkList)
+            {
+                <tr>
+                    <td>
+                        <div class="container backgroundWhite pb-4">
+                            <div class="card border">
+                                <div class="card-header bg-dark text-light ml-0 row container-fluid d-flex align-items-center py-2">
+                                    <div class="col-12 col-md-5">
+                                        <h1 class="text-warning m-0">@nationalPark.Name</h1>
+                                    </div>
+                                    <div class="col-12 col-md-4 text-md-center">
+                                        <h2 class="text-warning m-0 fs-3">State : @nationalPark.State</h2>
+                                    </div>
+                                    <div class="col-12 col-md-3 text-md-end text-center mt-2 mt-md-0">
+                                        <a asp-action="BookAppointment"
+                                           asp-controller="Home"
+                                           asp-route-nationalParkId="@nationalPark.Id"
+                                           class="btn btn-warning fw-bold text-dark px-3 py-2 shadow-sm">
+                                            Book Appointment &rarr;
+                                        </a>
+                                    </div>
+                                </div>
+                                <div class="card-body">
+                                    <div class="container rounded p-2">
+                                        <div class="row">
+                                            <div class="col-12 col-lg-8">
+                                                <div class="row">
+                                                    <div class="col-12">
+                                                        <h3 style="color:#bbb9b9">Established: @nationalPark.Established.Year</h3>
+                                                    </div>
+                                                    <div class="col-12">
+                                                        <table class="table table-striped" style="border:1px solid #808080">
+                                                            @{
+                                                                var trails = Model.TrailList?.Where(t => t.NationalParkId == nationalPark.Id) ?? Enumerable.Empty<dynamic>();
+                                                            }
+                                                            <thead>
+                                                                <tr class="table-secondary">
+                                                                    <th>Trail</th>
+                                                                    <th>Distance</th>
+                                                                    <th>Elevation Gain</th>
+                                                                    <th>Difficulty</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                @foreach (var trail in trails)
+                                                                {
+                                                                    <tr>
+                                                                        <td>@trail.Name</td>
+                                                                        <td>@trail.Distance</td>
+                                                                        <td>@trail.Elevation</td>
+                                                                        <td>@trail.Difficulty</td>
+                                                                    </tr>
+                                                                }
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="col-12 col-lg-4 text-center">
+                                                @if (nationalPark.Picture != null && nationalPark.Picture.Length > 0)
+                                                {
+                                                    var base64 = Convert.ToBase64String(nationalPark.Picture);
+                                                    var imgsrc = string.Format("data:image/jpg;base64,{0}", base64);
+                                                    <img src="@imgsrc" class="card-img-top p-2 rounded" width="100%" />
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+
+                    <td>@nationalPark.Name</td>
+                    <td>@nationalPark.State</td>
+                    <td>@nationalPark.Name @nationalPark.State</td>
+                </tr>
+            }
+        }
+    </tbody>
+</table>
+@section Scripts
+{
+    <script>
+        $(document).ready(function () {
+            $("#nationalParkTable thead").hide();
+
+            var parkTable = $("#nationalParkTable").DataTable({
+                pageLength: 5,
+                paging: true,
+                ordering: false,
+                dom: '<"park-top mb-3">rt<"park-bottom mt-3"ip>',
+                columnDefs: [
+                    { targets: 1, visible: false },
+                    { targets: 2, visible: false },
+                    { targets: 3, visible: false }
+                ],
+                language: {
+                    info: "Showing _START_ to _END_ of _TOTAL_ National Parks",
+                    infoEmpty: "No parks available",
+                    zeroRecords: "No matching national parks found",
+                    paginate: {
+                        previous: "Previous",
+                        next: "Next"
+                    }
+                }
+            });
+
+                   $(".park-top").html(`
+            <div class="d-flex justify-content-between align-items-center mb-3 w-100">
+                <!-- Left Side: Search By Dropdown -->
+                <div class="d-flex align-items-center gap-2">
+                    <label class="fw-bold mb-0">Search By:</label>
+                    <select id="searchType" class="form-select form-select-sm" style="width: 120px;">
+                        <option value="all">All</option>
+                        <option value="name">Name</option>
+                        <option value="state">State</option>
+                    </select>
+                </div>
+
+                <!-- Right Side: Search Label & Input Box -->
+                <div class="d-flex align-items-center gap-2">
+                    <label class="fw-bold mb-0">Search:</label>
+                    <input type="text" id="parkSearch" class="form-control form-control-sm" placeholder="Type to search..." style="width: 250px;" />
+                </div>
+            </div>
+        `);
+
+            function filterParkData() {
+                var searchText = $("#parkSearch").val().trim();
+                var searchType = $("#searchType").val();
+
+                parkTable.columns().search("");
+
+                if (searchType === "all") {
+                    parkTable.column(3).search(searchText);
+                } else if (searchType === "name") {
+                    parkTable.column(1).search(searchText);
+                } else if (searchType === "state") {
+                    parkTable.column(2).search(searchText);
+                }
+
+                parkTable.draw();
+            }
+
+            $(document).on("input keyup", "#parkSearch", function () {
+                filterParkData();
+            });
+
+            $(document).on("change", "#searchType", function () {
+                filterParkData();
+            });
+        });
+    </script>
+}
